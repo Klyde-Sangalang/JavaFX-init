@@ -1,6 +1,30 @@
 ## Getting Started
 
-Welcome to the VS Code Java world. Here is a guideline to help you get started to write Java code in Visual Studio Code.
+Welcome to Initialized JavaFx Project
+
+To Get Started
+
+Create a Folder that you want to create the project
+
+then open that folder in VSCode or your preferred IDE
+
+then clone the project
+
+to clone do:
+
+```
+    git clone https://github.com/Klyde-Sangalang/JavaFX-init.git
+```
+
+
+
+## Running the project
+
+- to run the project go to the debug tool
+- on the dropdown button at the top click that and choose Launch Java Program
+- then click play / run
+
+
 
 ## Folder Structure
 
