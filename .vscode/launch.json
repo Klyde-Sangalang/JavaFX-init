@@ -6,10 +6,10 @@
 	"configurations": [
 		{
 			"type": "java",
-			"name": "Launch Java Program",
+			"name": "Launch App",
 			"request": "launch",
 			"mainClass": "App",
-			"vmArgs": "--module-path \"lib\" --add-modules javafx.controls,javafx.fxml"
+			"vmArgs": "--module-path \"C:\\Users\\Dhiraj\\Downloads\\openjfx-26.0.1_windows-x64_bin-sdk (1)\\javafx-sdk-26.0.1\\lib\" --add-modules javafx.controls,javafx.fxml"
 		}
 	]
 }
