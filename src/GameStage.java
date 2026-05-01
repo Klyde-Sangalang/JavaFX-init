@@ -1,4 +1,3 @@
-
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -20,17 +19,24 @@ public class GameStage {
     // Boss Configuration (Editable Constants)
     private static final int BOSS_MAX_HEALTH = 50;
     private static final int MAX_BOSS_MINIONS = 30;
-    private static final int BOSS_SUMMON_INTERVAL_FULL = 300; // 10 seconds at 50 FPS
-    private static final int BOSS_SUMMON_INTERVAL_HALF = 150; // 5 seconds at 50 FPS
+    private static final int BOSS_SUMMON_INTERVAL_FULL = 300;
+    private static final int BOSS_SUMMON_INTERVAL_HALF = 150;
 
-    private double shipX = 480; // Initial X position (center)
-    private double shipY = 270; // Initial Y position (center)
+    // Power-up Configuration
+    private static final double POWERUP_DROP_CHANCE = 0.20; // 20% chance
+    private static final long POWERUP_DURATION_MILLIS = 15 * 1000L; // 15 seconds
+    private static final int POWERUP_DAMAGE = 5;
+    private static final int NORMAL_DAMAGE = 1;
+
+    private double shipX = 480;
+    private double shipY = 270;
     private double shipSpeed = 5.0;
     private Set<KeyCode> pressedKeys = new HashSet<>();
     private List<Projectile> projectiles = new ArrayList<>();
     private List<Enemy> enemies = new ArrayList<>();
     private List<Minion> minions = new ArrayList<>();
     private List<Explosion> explosions = new ArrayList<>();
+    private List<PowerUp> powerUps = new ArrayList<>();
     private boolean spacePressedLastFrame = false;
     private int enemySpawnCounter = 0;
     private Random random = new Random();
@@ -42,21 +48,28 @@ public class GameStage {
     private Boss boss = null;
     private int screenFlashCounter = 0;
     private boolean screenFlashing = false;
-    private int killsWhenBossDied = 0; // Tracks kill count when boss died
+    private int killsWhenBossDied = 0;
     private static final long INITIAL_TIME_MILLIS = 1 * 60 * 1000L;
     private static final long TIME_BONUS_PER_ENEMY_MILLIS = 2 * 1000L;
     private long remainingTimeMillis;
     private long lastUpdateTimeMillis;
 
+    // Power-up state
+    private boolean powerUpActive = false;
+    private long powerUpExpiryMillis = 0;
+    private int currentDamage = NORMAL_DAMAGE;
+
     private class Projectile {
         ImageView view;
         double x, y;
         double speedY = -10.0;
+        int damage;
 
-        Projectile(ImageView view, double x, double y) {
+        Projectile(ImageView view, double x, double y, int damage) {
             this.view = view;
             this.x = x;
             this.y = y;
+            this.damage = damage;
         }
     }
 
@@ -65,10 +78,10 @@ public class GameStage {
         double x, y;
         double speedY = 3.0;
         double speedX = 0;
-        double direction = 1.0; // 1 for right, -1 for left
+        double direction = 1.0;
         int changeDirectionCounter = 0;
-        int hits = 0; // Track number of hits
-        int enemyType; // 1 or 2
+        int hits = 0;
+        int enemyType;
         Image originalImage;
         Image hit1Image;
         Image hit2Image;
@@ -90,6 +103,15 @@ public class GameStage {
                 view.setImage(hit1Image);
             } else if (hits == 2) {
                 view.setImage(hit2Image);
+            }
+        }
+
+        // Apply N damage as N successive hits
+        void takeDamage(int damage) {
+            for (int i = 0; i < damage; i++) {
+                takeHit();
+                if (hits >= 2)
+                    break;
             }
         }
     }
@@ -115,14 +137,14 @@ public class GameStage {
 
         boolean updateFrame() {
             frameCounter++;
-            if (frameCounter >= 10) { // Show each frame for 10 iterations
+            if (frameCounter >= 10) {
                 frameCounter = 0;
                 frameIndex++;
                 if (frameIndex < frames.length) {
                     view.setImage(frames[frameIndex]);
-                    return false; // Animation still playing
+                    return false;
                 }
-                return true; // Animation complete
+                return true;
             }
             return false;
         }
@@ -133,13 +155,13 @@ public class GameStage {
         int summonCounter = 0;
         int minionCount = 0;
         Image bossHitImage;
-        int bossSize = 120; // Boss collision size
-        int hitFrameCounter = 0; // Counter for showing hit frame
+        int bossSize = 120;
+        int hitFrameCounter = 0;
 
         Boss(ImageView view, double x, double y, Image hitImage) {
             super(view, x, y, 0, null, null, null);
-            this.speedY = 0; // Boss doesn't move vertically
-            this.direction = 1.0; // Start moving right
+            this.speedY = 0;
+            this.direction = 1.0;
             this.changeDirectionCounter = random.nextInt(40) + 20;
             this.bossHitImage = hitImage;
         }
@@ -147,8 +169,17 @@ public class GameStage {
         void takeHit() {
             health--;
             if (health > 0) {
-                hitFrameCounter = 10; // Show hit frame for 10 frames (~200ms)
+                hitFrameCounter = 10;
                 view.setImage(bossHitImage);
+            }
+        }
+
+        @Override
+        void takeDamage(int damage) {
+            for (int i = 0; i < damage; i++) {
+                takeHit();
+                if (health <= 0)
+                    break;
             }
         }
 
@@ -156,7 +187,7 @@ public class GameStage {
             if (hitFrameCounter > 0) {
                 hitFrameCounter--;
                 if (hitFrameCounter == 0) {
-                    view.setImage(originalImage); // Restore original image
+                    view.setImage(originalImage);
                 }
             }
         }
@@ -176,7 +207,7 @@ public class GameStage {
         ImageView view;
         double x, y;
         double speedY = 0;
-        int delayCounter = 30; // 30 frames delay before moving
+        int delayCounter = 30;
 
         Minion(ImageView view, double x, double y) {
             this.view = view;
@@ -188,22 +219,34 @@ public class GameStage {
             if (delayCounter > 0) {
                 delayCounter--;
             } else {
-                speedY = 3.0; // Start moving down after delay
+                speedY = 3.0;
                 y += speedY;
             }
         }
     }
 
+    private class PowerUp {
+        ImageView view;
+        double x, y;
+        double speedY = 2.0;
+
+        PowerUp(ImageView view, double x, double y) {
+            this.view = view;
+            this.x = x;
+            this.y = y;
+        }
+    }
+
     public void setStage(Stage stage) {
 
-        // Create the game area
         Pane gameArea = new Pane();
         gameArea.setStyle("-fx-background-color: #1a1a1a;");
 
-        // Load and create spaceship
         try {
             Image shipImage = new Image("file:assets/Mobs/SpaceshipComprog.png");
             Image projectileImage = new Image("file:assets/projectiles/fire1.png");
+            Image projectileImage2 = new Image("file:assets/projectiles/fire2.png");
+            Image powerUpImage = new Image("file:assets/Mobs/ammo 03.png");
             Image enemy1Image = new Image("file:assets/Mobs/enemy1.png");
             Image enemy2Image = new Image("file:assets/Mobs/enemy2.png");
             Image enemy1Hit1Image = new Image("file:assets/Mobs/enemy1-hit1.png");
@@ -227,7 +270,6 @@ public class GameStage {
 
             gameArea.getChildren().add(spaceship);
 
-            // Load Exit button image
             Image exitImg = new Image("file:assets/buttons/Exit.png");
             ImageView exitView = new ImageView(exitImg);
             exitView.setFitWidth(60);
@@ -236,9 +278,8 @@ public class GameStage {
 
             Label timerLabel = new Label(formatTime(INITIAL_TIME_MILLIS));
             timerLabel.setStyle("-fx-font-size: 18px; -fx-text-fill: white; -fx-font-weight: bold;");
-            timerLabel.setLayoutX(860); // near right edge (960 width)
-            timerLabel.setLayoutY(500); // near bottom (540 height)
-
+            timerLabel.setLayoutX(860);
+            timerLabel.setLayoutY(500);
             gameArea.getChildren().add(timerLabel);
 
             Button backButton = new Button();
@@ -246,7 +287,6 @@ public class GameStage {
             backButton.setStyle("-fx-background-color: transparent;");
             backButton.toFront();
 
-            // Create "You Lose" label
             Label youLoseLabel = new Label("YOU LOSE");
             youLoseLabel.setStyle("-fx-font-size: 60px; -fx-text-fill: #ff0000; -fx-font-weight: bold;");
             youLoseLabel.setLayoutX(300);
@@ -254,7 +294,6 @@ public class GameStage {
             youLoseLabel.setVisible(false);
             gameArea.getChildren().add(youLoseLabel);
 
-            // Create boss health label
             Label bossHealthLabel = new Label("Boss Health: 0");
             bossHealthLabel.setStyle("-fx-font-size: 18px; -fx-text-fill: #ff0000; -fx-font-weight: bold;");
             bossHealthLabel.setLayoutX(400);
@@ -262,13 +301,19 @@ public class GameStage {
             bossHealthLabel.setVisible(false);
             gameArea.getChildren().add(bossHealthLabel);
 
-            // Create screen flash overlay for boss spawn
+            // Power-up status label
+            Label powerUpLabel = new Label("");
+            powerUpLabel.setStyle("-fx-font-size: 16px; -fx-text-fill: #ffcc00; -fx-font-weight: bold;");
+            powerUpLabel.setLayoutX(10);
+            powerUpLabel.setLayoutY(80);
+            powerUpLabel.setVisible(false);
+            gameArea.getChildren().add(powerUpLabel);
+
             javafx.scene.shape.Rectangle flashOverlay = new javafx.scene.shape.Rectangle(960, 540);
             flashOverlay.setFill(javafx.scene.paint.Color.BLACK);
             flashOverlay.setOpacity(0);
             gameArea.getChildren().add(flashOverlay);
 
-            // Layout for UI controls
             backButton.setLayoutX(10);
             backButton.setLayoutY(10);
 
@@ -277,27 +322,18 @@ public class GameStage {
             backButton.setStyle("-fx-background-color: transparent;");
             backButton.setCursor(javafx.scene.Cursor.HAND);
 
-            // Main layout
             BorderPane root = new BorderPane();
             root.setCenter(gameArea);
 
-            // Scene
             Scene gameScene = new Scene(root, 960, 540);
 
-            // Keyboard controls
-            gameScene.setOnKeyPressed(e -> {
-                pressedKeys.add(e.getCode());
-            });
+            gameScene.setOnKeyPressed(e -> pressedKeys.add(e.getCode()));
+            gameScene.setOnKeyReleased(e -> pressedKeys.remove(e.getCode()));
 
-            gameScene.setOnKeyReleased(e -> {
-                pressedKeys.remove(e.getCode());
-            });
-
-            // Game loop for continuous movement
             Thread gameLoop = new Thread(() -> {
                 while (true) {
                     try {
-                        Thread.sleep(20); // ~50 FPS
+                        Thread.sleep(20);
                         long currentTime = System.currentTimeMillis();
                         long deltaMillis = currentTime - lastUpdateTimeMillis;
                         lastUpdateTimeMillis = currentTime;
@@ -306,7 +342,13 @@ public class GameStage {
                             remainingTimeMillis = Math.max(0, remainingTimeMillis - deltaMillis);
                         }
 
-                        // If player is hit, check if explosion finished
+                        // Power-up expiry check
+                        if (powerUpActive && currentTime >= powerUpExpiryMillis) {
+                            powerUpActive = false;
+                            currentDamage = NORMAL_DAMAGE;
+                            javafx.application.Platform.runLater(() -> powerUpLabel.setVisible(false));
+                        }
+
                         if (playerHit && playerExplosion != null
                                 && playerExplosion.frameIndex >= playerExplosion.frames.length - 1) {
                             gameOver = true;
@@ -315,7 +357,7 @@ public class GameStage {
                                 youLoseLabel.setVisible(true);
                                 timerLabel.setText(formatTime(remainingTimeMillis));
                             });
-                            break; // Exit game loop
+                            break;
                         }
 
                         if (remainingTimeMillis <= 0) {
@@ -327,35 +369,27 @@ public class GameStage {
                             break;
                         }
 
-                        if (gameOver) {
-                            break; // Exit if game over
-                        }
+                        if (gameOver)
+                            break;
 
-                        // Update spaceship position based on pressed keys
-                        if (!playerHit) { // Only move if not hit
-                            if (pressedKeys.contains(KeyCode.UP) || pressedKeys.contains(KeyCode.W)) {
+                        if (!playerHit) {
+                            if (pressedKeys.contains(KeyCode.UP) || pressedKeys.contains(KeyCode.W))
                                 shipY -= shipSpeed;
-                            }
-                            if (pressedKeys.contains(KeyCode.DOWN) || pressedKeys.contains(KeyCode.S)) {
+                            if (pressedKeys.contains(KeyCode.DOWN) || pressedKeys.contains(KeyCode.S))
                                 shipY += shipSpeed;
-                            }
-                            if (pressedKeys.contains(KeyCode.LEFT) || pressedKeys.contains(KeyCode.A)) {
+                            if (pressedKeys.contains(KeyCode.LEFT) || pressedKeys.contains(KeyCode.A))
                                 shipX -= shipSpeed;
-                            }
-                            if (pressedKeys.contains(KeyCode.RIGHT) || pressedKeys.contains(KeyCode.D)) {
+                            if (pressedKeys.contains(KeyCode.RIGHT) || pressedKeys.contains(KeyCode.D))
                                 shipX += shipSpeed;
-                            }
 
-                            // Boundary checks
                             shipX = Math.max(0, Math.min(shipX, 910));
                             shipY = Math.max(0, Math.min(shipY, 490));
                         }
 
-                        // Spawn enemies randomly
-                        if (!playerHit && !bossSpawned) { // Only spawn if player not hit and boss not spawned
+                        if (!playerHit && !bossSpawned) {
                             enemySpawnCounter++;
-                            if (enemySpawnCounter > 60) { // Spawn every ~1.2 seconds
-                                int type = random.nextInt(2) + 1; // 1 or 2
+                            if (enemySpawnCounter > 60) {
+                                int type = random.nextInt(2) + 1;
                                 Image selectedImage, hit1, hit2;
 
                                 if (type == 1) {
@@ -377,60 +411,42 @@ public class GameStage {
                                 Enemy enemy = new Enemy(enemyView, spawnX, -50, type, selectedImage, hit1, hit2);
                                 enemies.add(enemy);
 
-                                javafx.application.Platform.runLater(() -> {
-                                    gameArea.getChildren().add(enemyView);
-                                });
-
+                                javafx.application.Platform.runLater(() -> gameArea.getChildren().add(enemyView));
                                 enemySpawnCounter = 0;
                             }
                         }
 
-                        // Update enemy positions
                         List<Enemy> enemiesToRemove = new ArrayList<>();
                         for (Enemy enemy : enemies) {
                             enemy.y += enemy.speedY;
 
-                            // Update boss hit frame if applicable
                             if (enemy instanceof Boss) {
                                 ((Boss) enemy).updateHitFrame();
                             }
 
-                            // Movement logic for boss and regular enemies
                             if (enemy instanceof Boss) {
-                                // Boss moves side to side
                                 Boss bossEnemy = (Boss) enemy;
                                 bossEnemy.changeDirectionCounter--;
-
-                                // Random direction change
                                 if (bossEnemy.changeDirectionCounter <= 0) {
                                     bossEnemy.direction = (random.nextDouble() > 0.5) ? 1.0 : -1.0;
                                     bossEnemy.changeDirectionCounter = random.nextInt(40) + 20;
                                 }
-
                                 bossEnemy.x += bossEnemy.direction * 2.0;
-
-                                // Boundary checks for boss horizontal movement
                                 if (bossEnemy.x < 0) {
                                     bossEnemy.x = 0;
                                     bossEnemy.direction = 1.0;
                                 }
-                                if (bossEnemy.x > 840) { // 960 - 120 (boss width)
+                                if (bossEnemy.x > 840) {
                                     bossEnemy.x = 840;
                                     bossEnemy.direction = -1.0;
                                 }
                             } else {
-                                // Regular enemy movement
                                 enemy.changeDirectionCounter--;
-
-                                // Random direction change
                                 if (enemy.changeDirectionCounter <= 0) {
                                     enemy.direction = (random.nextDouble() > 0.5) ? 1.0 : -1.0;
                                     enemy.changeDirectionCounter = random.nextInt(40) + 20;
                                 }
-
                                 enemy.x += enemy.direction * 2.0;
-
-                                // Boundary checks for horizontal movement
                                 if (enemy.x < 0) {
                                     enemy.x = 0;
                                     enemy.direction = 1.0;
@@ -441,19 +457,14 @@ public class GameStage {
                                 }
                             }
 
-                            // Remove if below screen
-                            if (enemy.y > 540) {
+                            if (enemy.y > 540)
                                 enemiesToRemove.add(enemy);
-                            }
 
-                            // Collision detection with spaceship
                             if (Math.abs(enemy.x - shipX) < 40 && Math.abs(enemy.y - shipY) < 40 && !playerHit) {
-                                // Spaceship gets hit - create explosion at spaceship
                                 playerExplosion = new Explosion(explosionFrames, shipX, shipY);
                                 explosions.add(playerExplosion);
                                 enemiesToRemove.add(enemy);
                                 playerHit = true;
-
                                 javafx.application.Platform.runLater(() -> {
                                     spaceship.setVisible(false);
                                     gameArea.getChildren().add(playerExplosion.view);
@@ -461,50 +472,36 @@ public class GameStage {
                             }
                         }
 
-                        // Boss minion summoning logic - spawn minions across entire width
                         if (boss != null && boss.shouldSummon()) {
-                            // Spawn multiple minions spread across the screen width
-                            int numMinions = 15; // Number of minions to spawn in a row
+                            int numMinions = 15;
                             for (int i = 0; i < numMinions; i++) {
                                 if (boss.minionCount < MAX_BOSS_MINIONS) {
-                                    ImageView minionView = new ImageView(enemy1Image); // Use enemy1 as minion
+                                    ImageView minionView = new ImageView(enemy1Image);
                                     minionView.setFitWidth(40);
                                     minionView.setFitHeight(40);
                                     minionView.setPreserveRatio(true);
-
-                                    // Spread minions evenly across screen width
                                     double spawnX = (i * 960.0) / numMinions + 40;
                                     Minion minion = new Minion(minionView, spawnX, boss.y + 50);
                                     minions.add(minion);
                                     boss.minionCount++;
-
-                                    javafx.application.Platform.runLater(() -> {
-                                        gameArea.getChildren().add(minionView);
-                                    });
+                                    javafx.application.Platform.runLater(() -> gameArea.getChildren().add(minionView));
                                 }
                             }
                         }
 
-                        // Update minions
                         List<Minion> minionsToRemove = new ArrayList<>();
                         for (Minion minion : minions) {
                             minion.update();
-
-                            // Remove if below screen
                             if (minion.y > 540) {
                                 minionsToRemove.add(minion);
-                                if (boss != null) {
-                                    boss.minionCount--; // Decrement count when minion goes off-screen
-                                }
+                                if (boss != null)
+                                    boss.minionCount--;
                             }
-
-                            // Collision with spaceship
                             if (Math.abs(minion.x - shipX) < 40 && Math.abs(minion.y - shipY) < 40 && !playerHit) {
                                 playerExplosion = new Explosion(explosionFrames, shipX, shipY);
                                 explosions.add(playerExplosion);
                                 minionsToRemove.add(minion);
                                 playerHit = true;
-
                                 javafx.application.Platform.runLater(() -> {
                                     spaceship.setVisible(false);
                                     gameArea.getChildren().add(playerExplosion.view);
@@ -512,28 +509,24 @@ public class GameStage {
                             }
                         }
 
-                        // Check projectile-minion collisions
                         List<Projectile> projectilesToRemove2 = new ArrayList<>();
                         for (Projectile proj : projectiles) {
                             for (Minion minion : minions) {
                                 if (Math.abs(proj.x - minion.x) < 40 && Math.abs(proj.y - minion.y) < 40) {
                                     projectilesToRemove2.add(proj);
                                     minionsToRemove.add(minion);
-                                    if (boss != null) {
+                                    if (boss != null)
                                         boss.minionCount--;
-                                    }
                                     break;
                                 }
                             }
                         }
 
-                        // Check projectile-enemy collisions
                         List<Projectile> projectilesToRemove = new ArrayList<>();
                         List<Enemy> enemiesToExplode = new ArrayList<>();
 
                         for (Projectile proj : projectiles) {
                             for (Enemy enemy : enemies) {
-                                // Use different collision distance for boss (80x80 = 40 half-size)
                                 double collisionDist = (enemy instanceof Boss) ? 50 : 40;
                                 if (Math.abs(proj.x - enemy.x) < collisionDist
                                         && Math.abs(proj.y - enemy.y) < collisionDist) {
@@ -541,133 +534,145 @@ public class GameStage {
 
                                     if (enemy instanceof Boss) {
                                         Boss bossEnemy = (Boss) enemy;
-                                        bossEnemy.takeHit();
-                                        if (bossEnemy.health <= 0) {
+                                        bossEnemy.takeDamage(proj.damage);
+                                        if (bossEnemy.health <= 0)
                                             enemiesToExplode.add(enemy);
-                                        }
                                     } else {
-                                        // Regular enemy
-                                        enemy.takeHit();
-                                        if (enemy.hits >= 2) {
+                                        enemy.takeDamage(proj.damage);
+                                        if (enemy.hits >= 2)
                                             enemiesToExplode.add(enemy);
-                                        }
                                     }
                                     break;
                                 }
                             }
                         }
 
-                        // Handle space bar for firing projectiles
                         if (pressedKeys.contains(KeyCode.SPACE) && !spacePressedLastFrame && !playerHit) {
-                            // Fire projectile
-                            ImageView projectileView = new ImageView(projectileImage);
+                            Image projImg = powerUpActive ? projectileImage2 : projectileImage;
+                            ImageView projectileView = new ImageView(projImg);
                             projectileView.setFitWidth(20);
                             projectileView.setFitHeight(20);
                             projectileView.setPreserveRatio(true);
 
-                            Projectile proj = new Projectile(projectileView, shipX + 25, shipY + 25);
+                            Projectile proj = new Projectile(projectileView, shipX + 25, shipY + 25, currentDamage);
                             projectiles.add(proj);
 
-                            javafx.application.Platform.runLater(() -> {
-                                gameArea.getChildren().add(projectileView);
-                            });
+                            javafx.application.Platform.runLater(() -> gameArea.getChildren().add(projectileView));
                         }
                         spacePressedLastFrame = pressedKeys.contains(KeyCode.SPACE);
 
-                        // Update projectile positions and remove off-screen projectiles
                         List<Projectile> toRemove = new ArrayList<>();
                         for (Projectile proj : projectiles) {
                             proj.y += proj.speedY;
-
-                            // Remove if off-screen
-                            if (proj.y < 0) {
+                            if (proj.y < 0)
                                 toRemove.add(proj);
-                            }
                         }
 
-                        // Add projectiles hit by enemies to removal list
                         toRemove.addAll(projectilesToRemove);
                         toRemove.addAll(projectilesToRemove2);
 
-                        // Add enemies that should explode to removal list
                         enemiesToRemove.addAll(enemiesToExplode);
 
-                        // Increment kill count and reward time for each enemy destroyed
+                        // Power-up drop chance for each killed enemy (not boss)
+                        List<PowerUp> newPowerUps = new ArrayList<>();
+                        for (Enemy enemy : enemiesToExplode) {
+                            if (!(enemy instanceof Boss) && random.nextDouble() < POWERUP_DROP_CHANCE) {
+                                ImageView puView = new ImageView(powerUpImage);
+                                puView.setFitWidth(30);
+                                puView.setFitHeight(30);
+                                puView.setPreserveRatio(true);
+                                PowerUp pu = new PowerUp(puView, enemy.x, enemy.y);
+                                newPowerUps.add(pu);
+                            }
+                        }
+                        for (PowerUp pu : newPowerUps) {
+                            powerUps.add(pu);
+                            javafx.application.Platform.runLater(() -> gameArea.getChildren().add(pu.view));
+                        }
+
+                        // Update power-ups (fall and pickup)
+                        List<PowerUp> powerUpsToRemove = new ArrayList<>();
+                        for (PowerUp pu : powerUps) {
+                            pu.y += pu.speedY;
+                            if (pu.y > 540) {
+                                powerUpsToRemove.add(pu);
+                                continue;
+                            }
+                            if (!playerHit && Math.abs(pu.x - shipX) < 35 && Math.abs(pu.y - shipY) < 35) {
+                                powerUpsToRemove.add(pu);
+                                powerUpActive = true;
+                                currentDamage = POWERUP_DAMAGE;
+                                powerUpExpiryMillis = currentTime + POWERUP_DURATION_MILLIS;
+                                javafx.application.Platform.runLater(() -> {
+                                    powerUpLabel.setText("POWER-UP ACTIVE!");
+                                    powerUpLabel.setVisible(true);
+                                });
+                            }
+                        }
+
                         enemyKillCount += enemiesToExplode.size();
                         remainingTimeMillis += TIME_BONUS_PER_ENEMY_MILLIS * enemiesToExplode.size();
                         remainingTimeMillis = Math.min(remainingTimeMillis, INITIAL_TIME_MILLIS);
 
-                        // Check if boss should spawn (50 enemies killed)
                         if (enemyKillCount % 50 == 0 && enemyKillCount > 0 && !bossSpawned && !screenFlashing) {
                             bossSpawned = true;
                             screenFlashing = true;
                             screenFlashCounter = 0;
                         }
 
-                        // Check if boss should respawn (50 more kills after boss death)
                         if (!bossSpawned && boss == null && enemyKillCount >= killsWhenBossDied + 50
                                 && !screenFlashing) {
                             screenFlashing = true;
                             screenFlashCounter = 0;
                         }
 
-                        // Handle screen flash effect for boss spawn
                         if (screenFlashing) {
                             screenFlashCounter++;
-                            if (screenFlashCounter < 100) { // Flash for about 2 seconds
-                                // Alternate between black and white
+                            if (screenFlashCounter < 100) {
                                 double opacity = (screenFlashCounter % 20) < 10 ? 0.7 : 0.2;
-                                javafx.application.Platform.runLater(() -> {
-                                    flashOverlay.setOpacity(opacity);
-                                });
+                                javafx.application.Platform.runLater(() -> flashOverlay.setOpacity(opacity));
                             } else {
-                                // Finished flashing, spawn boss
                                 screenFlashing = false;
                                 javafx.application.Platform.runLater(() -> {
                                     flashOverlay.setOpacity(0);
-
-                                    // Spawn boss
                                     if (boss == null) {
                                         ImageView bossView = new ImageView(bossImage);
                                         bossView.setFitWidth(80);
                                         bossView.setFitHeight(80);
                                         bossView.setPreserveRatio(true);
-
-                                        boss = new Boss(bossView, 450, 20, bossHitImage); // Stay at top
+                                        boss = new Boss(bossView, 450, 20, bossHitImage);
                                         boss.originalImage = bossImage;
                                         enemies.add(boss);
                                         gameArea.getChildren().add(bossView);
-                                        bossSpawned = true; // Set to true AFTER boss is spawned
-                                        bossHealthLabel.setVisible(true); // Show health label when boss spawns
+                                        bossSpawned = true;
+                                        bossHealthLabel.setVisible(true);
                                     }
                                 });
                             }
                         }
 
-                        // Update explosion animations
                         List<Explosion> explosionsToRemove = new ArrayList<>();
                         for (Explosion explosion : explosions) {
-                            if (explosion.updateFrame()) {
+                            if (explosion.updateFrame())
                                 explosionsToRemove.add(explosion);
-                            }
                         }
 
-                        // Create explosions for enemies hit twice
                         for (Enemy enemy : enemiesToExplode) {
                             Explosion explosion = new Explosion(explosionFrames, enemy.x, enemy.y);
                             explosions.add(explosion);
-
-                            javafx.application.Platform.runLater(() -> {
-                                gameArea.getChildren().add(explosion.view);
-                            });
+                            javafx.application.Platform.runLater(() -> gameArea.getChildren().add(explosion.view));
                         }
 
-                        // Update UI
                         String timeText = formatTime(remainingTimeMillis);
+                        long secondsLeft = powerUpActive ? Math.max(0, (powerUpExpiryMillis - currentTime) / 1000) : 0;
                         javafx.application.Platform.runLater(() -> {
                             timerLabel.setText(timeText);
                             spaceship.setLayoutX(shipX);
                             spaceship.setLayoutY(shipY);
+
+                            if (powerUpActive) {
+                                powerUpLabel.setText("POWER-UP: " + secondsLeft + "s");
+                            }
 
                             for (Projectile proj : projectiles) {
                                 proj.view.setLayoutX(proj.x);
@@ -677,8 +682,6 @@ public class GameStage {
                             for (Enemy enemy : enemies) {
                                 enemy.view.setLayoutX(enemy.x);
                                 enemy.view.setLayoutY(enemy.y);
-
-                                // Update boss health label
                                 if (boss != null && enemy instanceof Boss) {
                                     bossHealthLabel.setText("Boss Health: " + boss.health);
                                 }
@@ -689,35 +692,40 @@ public class GameStage {
                                 minion.view.setLayoutY(minion.y);
                             }
 
-                            // Remove off-screen projectiles
+                            for (PowerUp pu : powerUps) {
+                                pu.view.setLayoutX(pu.x);
+                                pu.view.setLayoutY(pu.y);
+                            }
+
                             for (Projectile proj : toRemove) {
                                 gameArea.getChildren().remove(proj.view);
                                 projectiles.remove(proj);
                             }
 
-                            // Remove off-screen enemies
                             for (Enemy enemy : enemiesToRemove) {
                                 gameArea.getChildren().remove(enemy.view);
                                 enemies.remove(enemy);
-                                // If boss is removed, reset for respawn
                                 if (enemy instanceof Boss && enemy == boss) {
                                     boss = null;
-                                    bossSpawned = false; // Re-enable regular enemy spawning
-                                    killsWhenBossDied = enemyKillCount; // Store kill count for respawn tracking
-                                    bossHealthLabel.setVisible(false); // Hide health label when boss dies
+                                    bossSpawned = false;
+                                    killsWhenBossDied = enemyKillCount;
+                                    bossHealthLabel.setVisible(false);
                                 }
                             }
 
-                            // Remove completed explosions
                             for (Explosion explosion : explosionsToRemove) {
                                 gameArea.getChildren().remove(explosion.view);
                                 explosions.remove(explosion);
                             }
 
-                            // Remove off-screen minions
                             for (Minion minion : minionsToRemove) {
                                 gameArea.getChildren().remove(minion.view);
                                 minions.remove(minion);
+                            }
+
+                            for (PowerUp pu : powerUpsToRemove) {
+                                gameArea.getChildren().remove(pu.view);
+                                powerUps.remove(pu);
                             }
                         });
 
@@ -731,22 +739,18 @@ public class GameStage {
             lastUpdateTimeMillis = System.currentTimeMillis();
             gameLoop.start();
 
-            // Back button action (go back to menu)
             backButton.setOnAction(e -> {
                 App menu = new App();
                 try {
-                    menu.start(stage); // reload original menu
+                    menu.start(stage);
                 } catch (Exception ex) {
                     ex.printStackTrace();
                 }
             });
 
-            // Set new scene to stage
             stage.setScene(gameScene);
             stage.setTitle("Game Stage");
             stage.show();
-
-            // Request focus for keyboard input
             gameArea.requestFocus();
 
         } catch (Exception ex) {
