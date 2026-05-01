@@ -1,35 +1,37 @@
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.stage.Stage;
-import javafx.scene.Group;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
-import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.scene.layout.Pane;
 import javafx.geometry.Pos;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
-import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
+import javafx.scene.layout.HBox;
 import components.MenuButton;
 
 public class App extends Application {
+    private Stage primaryStage;
+    private Pane mainLayout;
+    private Scene scene1;
+
     public void start(Stage primaryStage) {
-        Pane mainLayout = new Pane();
-        Scene scene1 = new Scene(mainLayout, 960, 540);
+        this.primaryStage = primaryStage;
+        mainLayout = new Pane();
+        scene1 = new Scene(mainLayout, 960, 540);
+        scene1.getStylesheets().add("style.css");
 
-        Label title = new Label("Space Shooter");
-        title.getStyleClass().add("title");
-        title.setLayoutX(380);
-        title.setLayoutY(50);
+        showMenuView();
 
-        // Register the custom font globally
-        Font.loadFont("file:assets/fonts/Jersey10-Regular.ttf", 36);
+        primaryStage.setScene(scene1);
+        primaryStage.show();
+    }
 
-        // Apply the font explicitly to the title label
-        title.setFont(Font.font("Jersey10", 36));
+    private void showMenuView() {
+        mainLayout.getChildren().clear();
 
         Image backgroundImage = new Image("file:assets/backgrounds/scene1.gif");
         ImageView backgroundView = new ImageView(backgroundImage);
@@ -37,16 +39,50 @@ public class App extends Application {
         backgroundView.setLayoutX(210);
         backgroundView.setLayoutY(-210);
 
-        // Buttons
+        Label title = new Label("Space Shooter");
+        title.getStyleClass().add("title");
+        Font.loadFont("file:assets/fonts/Jersey10-Regular.ttf", 36);
+        title.setFont(Font.font("Jersey10", 36));
+
+        HBox titleBox = new HBox();
+        titleBox.setPrefWidth(960);
+        titleBox.setAlignment(Pos.CENTER);
+        titleBox.setLayoutY(50);
+        titleBox.getChildren().add(title);
+
         ImageView startButton = MenuButton.create("file:assets/buttons/ICONS - 25.png", 240, 170, () -> {
             GameStage gameStage = new GameStage();
             gameStage.setStage(primaryStage);
         });
 
         ImageView aboutButton = MenuButton.create("file:assets/buttons/ICONS - 36.png", 240, 170, () -> {
-             Stage aboutStage = new Stage();
+            showAboutView();
+        });
+
+        ImageView exitButton = MenuButton.create("file:assets/buttons/ICONS - 30.png", 240, 170, () -> {
+            Platform.exit();
+        });
+
+        VBox centerButtons = new VBox(-100);
+        centerButtons.setLayoutX((960 - 240) / 2);
+        centerButtons.setLayoutY(200);
+        centerButtons.setStyle("-fx-padding: 0; -fx-alignment: center; -fx-width: 240; -fx-height: 170;");
+        centerButtons.getChildren().addAll(startButton, aboutButton, exitButton);
+
+        ImageView instructionsButton = MenuButton.create("file:assets/buttons/Instructions .png", 50, 50, () -> {
+            showInstructionsView();
+        });
+        instructionsButton.setLayoutX(14);
+        instructionsButton.setLayoutY(14);
+
+        mainLayout.getChildren().addAll(backgroundView, titleBox, centerButtons, instructionsButton);
+    }
+
+    private void showAboutView() {
+        mainLayout.getChildren().clear();
 
         VBox aboutContent = new VBox(15);
+        aboutContent.setPrefSize(960, 540);
         aboutContent.setAlignment(Pos.CENTER);
         aboutContent.setStyle(
             "-fx-background-color: linear-gradient(to bottom,#111827,#1e293b);" +
@@ -98,7 +134,6 @@ public class App extends Application {
             new Label("• Daena Alenrae D. Amata")
         );
 
-        // Make member names white
         membersBox.getChildren().forEach(node ->
             ((Label)node).setStyle(
                 "-fx-text-fill: white;" +
@@ -106,136 +141,99 @@ public class App extends Application {
             )
         );
 
+        Button backButton = new Button("Back to Menu");
+        backButton.setStyle(
+            "-fx-font-size: 14px;" +
+            "-fx-padding: 10px 20px;" +
+            "-fx-background-color: #ff6b6b;" +
+            "-fx-text-fill: white;" +
+            "-fx-background-radius: 5;"
+        );
+        backButton.setOnAction(e -> showMenuView());
+
         aboutContent.getChildren().addAll(
-            title,
+            aboutTitle,
             description,
             membersTitle,
-            membersBox
+            membersBox,
+            backButton
         );
 
-        Scene aboutScene = new Scene(aboutContent, 500, 450);
+        mainLayout.getChildren().add(aboutContent);
+    }
 
-        aboutStage.setScene(aboutScene);
-        aboutStage.setTitle("About");
-        aboutStage.show();
-        });
+    private void showInstructionsView() {
+        mainLayout.getChildren().clear();
 
-        ImageView exitButton = MenuButton.create("file:assets/buttons/ICONS - 30.png", 240, 170, () -> {
-            Platform.exit();
-        });
+        VBox instructionsContent = new VBox(15);
+        instructionsContent.setPrefSize(960, 540);
+        instructionsContent.setAlignment(Pos.CENTER);
+        instructionsContent.setStyle(
+            "-fx-background-color: linear-gradient(to bottom,#111827,#1e293b);" +
+            "-fx-padding: 30;"
+        );
 
-        VBox centerButtons = new VBox(-100);
-        centerButtons.setLayoutX((scene1.getWidth() - 240) / 2);
-        centerButtons.setLayoutY(200);
-        centerButtons.setStyle("-fx-padding: 0; -fx-alignment: center; -fx-width: 240; -fx-height: 170;");
-        centerButtons.getChildren().addAll(startButton, aboutButton, exitButton);
+        Label instructionsTitle = new Label("HOW TO PLAY");
+        instructionsTitle.setStyle(
+            "-fx-font-size: 24px;" +
+            "-fx-font-weight: bold;" +
+            "-fx-text-fill: #38bdf8;"
+        );
 
-        ImageView instructionsButton = MenuButton.create("file:assets/buttons/Instructions .png", 50, 50, () -> {
-            Stage instructionsStage = new Stage();
-            VBox instructionsContent = new VBox(10);
-            instructionsContent.setAlignment(Pos.CENTER);
-            instructionsContent.getChildren().addAll(
-                new Label("How to Play"),
-                new Label("1. Use arrow keys to move."),
-                new Label("2. Press space to shoot."),
-                new Label("3. Avoid enemy fire and survive!"),
-                new Label("4. Collect power-ups to gain advantages.")
+        VBox instructionsList = new VBox(10);
+        instructionsList.setAlignment(Pos.CENTER_LEFT);
+        instructionsList.setStyle(
+            "-fx-background-color: #0f172a;" +
+            "-fx-padding: 20;" +
+            "-fx-background-radius: 10;"
+        );
+
+        String[] instructions = {
+            "1. Use arrow keys or WASD to move your spaceship around",
+            "2. Press SPACE to fire projectiles at enemies",
+            "3. Avoid enemy fire and survive the countdown timer",
+            "4. Destroy enemies to earn time bonuses (+6 seconds per kill)",
+            "5. Every 50 enemies defeated triggers a boss battle",
+            "6. Defeat the boss to progress and earn more time",
+            "7. Game ends when the timer reaches 00:00"
+        };
+
+        for (String instruction : instructions) {
+            Label label = new Label(instruction);
+            label.setStyle(
+                "-fx-text-fill: white;" +
+                "-fx-font-size: 13px;" +
+                "-fx-wrap-text: true;"
             );
-            Scene instructionsScene = new Scene(instructionsContent, 400, 300);
-            instructionsStage.setScene(instructionsScene);
-            instructionsStage.setTitle("Instructions");
-            instructionsStage.show();
-        });
-        instructionsButton.setLayoutX(14);
-        instructionsButton.setLayoutY(14);
+            instructionsList.getChildren().add(label);
+        }
 
-        scene1.getStylesheets().add("style.css");
+        Button backButton = new Button("Back to Menu");
+        backButton.setStyle(
+            "-fx-font-size: 14px;" +
+            "-fx-padding: 10px 20px;" +
+            "-fx-background-color: #ff6b6b;" +
+            "-fx-text-fill: white;" +
+            "-fx-background-radius: 5;"
+        );
+        backButton.setOnAction(e -> showMenuView());
 
-        mainLayout.getChildren().addAll(backgroundView, title, centerButtons, instructionsButton);
+        instructionsContent.getChildren().addAll(
+            instructionsTitle,
+            instructionsList,
+            backButton
+        );
 
-        primaryStage.setScene(scene1);
-        primaryStage.show();
+        mainLayout.getChildren().add(instructionsContent);
     }
 
     public static void setMainMenu(Stage stage) {
-        Pane mainLayout = new Pane();
-        Scene scene1 = new Scene(mainLayout, 960, 540);
-
-        Label title = new Label("Space Shooter");
-        title.getStyleClass().add("title");
-        title.setLayoutX(380);
-        title.setLayoutY(50);
-
-        // Register the custom font globally
-        Font.loadFont("file:assets/fonts/Jersey10-Regular.ttf", 36);
-
-        // Apply the font explicitly to the title label
-        title.setFont(Font.font("Jersey10", 36));
-
-        Image backgroundImage = new Image("file:assets/backgrounds/scene1.gif");
-        ImageView backgroundView = new ImageView(backgroundImage);
-        backgroundView.setRotate(270);
-        backgroundView.setLayoutX(210);
-        backgroundView.setLayoutY(-210);
-
-        // Buttons
-        ImageView startButton = MenuButton.create("file:assets/buttons/ICONS - 25.png", 240, 170, () -> {
-            GameStage gameStage = new GameStage();
-            gameStage.setStage(stage);
-        });
-
-        ImageView aboutButton = MenuButton.create("file:assets/buttons/ICONS - 36.png", 240, 170, () -> {
-            Stage aboutStage = new Stage();
-            VBox aboutContent = new VBox(10);
-            aboutContent.setAlignment(Pos.CENTER);
-            aboutContent.getChildren().addAll(
-                new Label("About the Game"),
-                new Label("Project Members:"),
-                new Label("- Member 1"),
-                new Label("- Member 2"),
-                new Label("- Member 3")
-            );
-            Scene aboutScene = new Scene(aboutContent, 400, 300);
-            aboutStage.setScene(aboutScene);
-            aboutStage.setTitle("About");
-            aboutStage.show();
-        });
-
-        ImageView exitButton = MenuButton.create("file:assets/buttons/ICONS - 30.png", 240, 170, () -> {
-            Platform.exit();
-        });
-
-        VBox centerButtons = new VBox(-100);
-        centerButtons.setLayoutX((scene1.getWidth() - 240) / 2);
-        centerButtons.setLayoutY(200);
-        centerButtons.setStyle("-fx-padding: 0; -fx-alignment: center; -fx-width: 240; -fx-height: 170;");
-        centerButtons.getChildren().addAll(startButton, aboutButton, exitButton);
-
-        ImageView instructionsButton = MenuButton.create("file:assets/buttons/Instructions .png", 50, 50, () -> {
-            Stage instructionsStage = new Stage();
-            VBox instructionsContent = new VBox(10);
-            instructionsContent.setAlignment(Pos.CENTER);
-            instructionsContent.getChildren().addAll(
-                new Label("How to Play"),
-                new Label("1. Use arrow keys to move."),
-                new Label("2. Press space to shoot."),
-                new Label("3. Avoid enemy fire and survive!"),
-                new Label("4. Collect power-ups to gain advantages.")
-            );
-            Scene instructionsScene = new Scene(instructionsContent, 400, 300);
-            instructionsStage.setScene(instructionsScene);
-            instructionsStage.setTitle("Instructions");
-            instructionsStage.show();
-        });
-        instructionsButton.setLayoutX(14);
-        instructionsButton.setLayoutY(14);
-
-        scene1.getStylesheets().add("style.css");
-
-        mainLayout.getChildren().addAll(backgroundView, title, centerButtons, instructionsButton);
-
-        stage.setScene(scene1);
-        stage.show();
+        App app = new App();
+        try {
+            app.start(stage);
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
     }
 
     public static void main(String[] args) {

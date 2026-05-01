@@ -18,10 +18,10 @@ import javafx.stage.Stage;
 public class GameStage {
 
     // Boss Configuration (Editable Constants)
-    private static final int BOSS_MAX_HEALTH = 20;
-    private static final int MAX_BOSS_MINIONS = 15;
-    private static final int BOSS_SUMMON_INTERVAL_FULL = 600; // 10 seconds at 50 FPS
-    private static final int BOSS_SUMMON_INTERVAL_HALF = 300; // 5 seconds at 50 FPS
+    private static final int BOSS_MAX_HEALTH = 50;
+    private static final int MAX_BOSS_MINIONS = 30;
+    private static final int BOSS_SUMMON_INTERVAL_FULL = 300; // 10 seconds at 50 FPS
+    private static final int BOSS_SUMMON_INTERVAL_HALF = 150; // 5 seconds at 50 FPS
 
     private double shipX = 480; // Initial X position (center)
     private double shipY = 270; // Initial Y position (center)
@@ -43,6 +43,10 @@ public class GameStage {
     private int screenFlashCounter = 0;
     private boolean screenFlashing = false;
     private int killsWhenBossDied = 0; // Tracks kill count when boss died
+    private static final long INITIAL_TIME_MILLIS = 1 * 60 * 1000L;
+    private static final long TIME_BONUS_PER_ENEMY_MILLIS = 2 * 1000L;
+    private long remainingTimeMillis;
+    private long lastUpdateTimeMillis;
 
     private class Projectile {
         ImageView view;
@@ -230,6 +234,13 @@ public class GameStage {
             exitView.setFitHeight(60);
             exitView.setPreserveRatio(true);
 
+            Label timerLabel = new Label(formatTime(INITIAL_TIME_MILLIS));
+            timerLabel.setStyle("-fx-font-size: 18px; -fx-text-fill: white; -fx-font-weight: bold;");
+            timerLabel.setLayoutX(860); // near right edge (960 width)
+            timerLabel.setLayoutY(500); // near bottom (540 height)
+
+            gameArea.getChildren().add(timerLabel);
+
             Button backButton = new Button();
             backButton.setGraphic(exitView);
             backButton.setStyle("-fx-background-color: transparent;");
@@ -287,6 +298,13 @@ public class GameStage {
                 while (true) {
                     try {
                         Thread.sleep(20); // ~50 FPS
+                        long currentTime = System.currentTimeMillis();
+                        long deltaMillis = currentTime - lastUpdateTimeMillis;
+                        lastUpdateTimeMillis = currentTime;
+
+                        if (!gameOver && !playerHit) {
+                            remainingTimeMillis = Math.max(0, remainingTimeMillis - deltaMillis);
+                        }
 
                         // If player is hit, check if explosion finished
                         if (playerHit && playerExplosion != null
@@ -295,8 +313,18 @@ public class GameStage {
                             javafx.application.Platform.runLater(() -> {
                                 gameArea.getChildren().remove(playerExplosion.view);
                                 youLoseLabel.setVisible(true);
+                                timerLabel.setText(formatTime(remainingTimeMillis));
                             });
                             break; // Exit game loop
+                        }
+
+                        if (remainingTimeMillis <= 0) {
+                            gameOver = true;
+                            javafx.application.Platform.runLater(() -> {
+                                timerLabel.setText(formatTime(0));
+                                youLoseLabel.setVisible(true);
+                            });
+                            break;
                         }
 
                         if (gameOver) {
@@ -564,8 +592,10 @@ public class GameStage {
                         // Add enemies that should explode to removal list
                         enemiesToRemove.addAll(enemiesToExplode);
 
-                        // Increment kill count for each enemy destroyed
+                        // Increment kill count and reward time for each enemy destroyed
                         enemyKillCount += enemiesToExplode.size();
+                        remainingTimeMillis += TIME_BONUS_PER_ENEMY_MILLIS * enemiesToExplode.size();
+                        remainingTimeMillis = Math.min(remainingTimeMillis, INITIAL_TIME_MILLIS);
 
                         // Check if boss should spawn (50 enemies killed)
                         if (enemyKillCount % 50 == 0 && enemyKillCount > 0 && !bossSpawned && !screenFlashing) {
@@ -633,7 +663,9 @@ public class GameStage {
                         }
 
                         // Update UI
+                        String timeText = formatTime(remainingTimeMillis);
                         javafx.application.Platform.runLater(() -> {
+                            timerLabel.setText(timeText);
                             spaceship.setLayoutX(shipX);
                             spaceship.setLayoutY(shipY);
 
@@ -695,6 +727,8 @@ public class GameStage {
                 }
             });
             gameLoop.setDaemon(true);
+            remainingTimeMillis = INITIAL_TIME_MILLIS;
+            lastUpdateTimeMillis = System.currentTimeMillis();
             gameLoop.start();
 
             // Back button action (go back to menu)
@@ -719,5 +753,13 @@ public class GameStage {
             System.err.println("Failed to load spaceship image: " + ex.getMessage());
             ex.printStackTrace();
         }
+    }
+
+    private String formatTime(long timeMillis) {
+        long safeTimeMillis = Math.max(0, timeMillis);
+        int totalSeconds = (int) (safeTimeMillis / 1000);
+        int minutes = totalSeconds / 60;
+        int seconds = totalSeconds % 60;
+        return String.format("%02d:%02d", minutes, seconds);
     }
 }
